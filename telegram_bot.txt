@@ -1,0 +1,48 @@
+import aiohttp
+import logging
+from config import Config
+
+logger = logging.getLogger("TelegramBot")
+
+class TelegramNotifier:
+    def __init__(self):
+        self.token = Config.TELEGRAM_BOT_TOKEN
+        self.chat_id = Config.TELEGRAM_CHAT_ID
+        self.base_url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+        self.session = None
+
+    async def _ensure_session(self):
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+
+    async def send_message(self, message, level="INFO"):
+        """
+        发送 Telegram 消息
+        level: INFO, WARNING, CRITICAL
+        """
+        if not self.token or not self.chat_id:
+            logger.warning("Telegram token or chat_id not configured.")
+            return
+
+        icon = "ℹ️"
+        if level == "WARNING": icon = "⚠️"
+        elif level == "CRITICAL": icon = "Hg🚨"
+
+        full_msg = f"{icon} [HedgingBot] {level}\n\n{message}"
+
+        try:
+            await self._ensure_session()
+            payload = {
+                "chat_id": self.chat_id,
+                "text": full_msg,
+                "parse_mode": "Markdown"
+            }
+            async with self.session.post(self.base_url, json=payload) as resp:
+                if resp.status != 200:
+                    logger.error(f"Failed to send Telegram msg: {resp.status}")
+        except Exception as e:
+            logger.error(f"Telegram Send Error: {e}")
+
+    async def close(self):
+        if self.session:
+            await self.session.close()
